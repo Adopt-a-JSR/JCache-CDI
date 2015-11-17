@@ -1,14 +1,6 @@
 package com.kodcu;
 
-import javax.cache.CacheManager;
-import javax.cache.Caching;
 import javax.cache.annotation.*;
-import javax.enterprise.context.ApplicationScoped;
-import java.io.Serializable;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Created by rahmanusta on 02.11.2015.

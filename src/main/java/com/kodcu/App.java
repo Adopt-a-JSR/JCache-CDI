@@ -2,8 +2,6 @@ package com.kodcu;
 
 import javax.enterprise.inject.spi.CDI;
 import javax.inject.Inject;
-import java.util.Collection;
-import java.util.concurrent.ExecutionException;
 
 /**
  * Created by rahmanusta on 02.11.2015.
