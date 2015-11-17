@@ -1,3 +1,415 @@
-== Using JCache annotations in CDI container
+:linkattrs:
+:package: javax.cache.annotation
 
-Sample project demonstrates usage of JCache annotations in CDI container.
+== Using JCache Annotations with CDI
+
+JCache (https://jcp.org/en/jsr/detail?id=107[JSR 107] - Java Temporary Caching API) is a specification that will be available under Java EE 8 and will present a standard API for caching solutions (Hazelcast, EhCache, Coherence eg.). The survey has shown that _9.5%_ (orange) of the community is waiting for JCache.
+
+.Look https://blogs.oracle.com/ldemichiel/entry/results_from_the_java_ee[Java EE 8 Community Survey]
+image::images/ResultChart.png[align=center]
+
+Actually, JCache was going to be present in Java EE 7 but it wasn't completed by the deadline, it has been deferred to Java EE 8.( Look at https://blogs.oracle.com/theaquarium/entry/jcache_to_miss_java_ee[JCache to Miss Java EE 7])
+
+== JCache Annotations
+
+When using JCache annotations you can meet your caching needs just by declaring JCache annotations on your classes or methods.
+
+Here are JCache's standard annotations;
+
+.JCache Annotations
+****
+. {package}.CacheDefaults
+. {package}.CacheKey
+. {package}.CacheResult
+. {package}.CacheValue
+. {package}.CachePut
+. {package}.CacheRemove
+. {package}.CacheRemoveAll
+****
+
+=== CacheDefaults
+
+JCache `@CacheDefaults` annotation is applied above a class declaration. All the methods inside the applied class gets `@CacheDefaults` annotation options by default.
+
+.For example
+[source,java]
+----
+@CacheDefaults(cacheName = "personCacher") <1>
+public class CacheBean {
+
+///
+
+}
+----
+<1> Declares default cache name as ``personCacher``. All methods under this class inherit this option if not provided itself.  
+
+=== CachePut
+
+Puts a cache `value` into the cache object addressed by a `key`. You can think all the cache object as a `Map` instance but actually it is a type of `javax.cache.Cache`.
+
+We can declare which method parameter will be used as the `key` with `@CacheKey` annotion, also a `value` with `@CacheValue` annotation.
+
+.For example
+[source,java]
+----
+@CacheDefaults(cacheName = "personCacher")
+public class CacheBean {
+
+@CachePut
+//@CachePut(cacheName = "<cache_name>")
+public void put(@CacheKey Long id, @CacheValue Person person) {
+   //
+}
+
+}
+----
+
+As above a `Person` object will be put into a `javax.cache.Cache` object named `personCacher` with an `id`. You can keep the method body empty or persist the parameters anywhere (FS, NoSQL, DB eg.) in the method body. It just depends on your needs.
+
+=== CacheResult
+
+CacheResult is used to get a cached `value` by its `key`. If the related `value` is already in the cache, the cached value is returned from the proxy method without entering method body. if not, execution flow enters into the method body and also puts returned object to the cache.
+
+.For example
+[source,java]
+----
+@CacheDefaults(cacheName = "personCacher")
+public class CacheBean {
+
+@CacheResult
+public Person get(@CacheKey Long id) { <1>
+    Person person = //
+    return person;
+}
+
+@CachePut
+//@CachePut(cacheName = "<cache_name>")
+public void put(@CacheKey Long id, @CacheValue Person person) {
+   //
+}
+
+}
+----
+<1> Returns the cached value by its key if exist.
+
+=== CacheRemove
+
+Removes a cached `value` from cahce by its `key`.
+
+.For example
+[source,java]
+----
+@CacheDefaults(cacheName = "personCacher")
+public class CacheBean {
+
+@CacheRemove
+public void invalidate(@CacheKey Long id) {
+    //
+}
+
+}
+----
+
+We can also use `@CacheRemoveAll` annotation to remove all cached values.
+
+.For example
+[source,java]
+----
+@CacheDefaults(cacheName = "personCacher")
+public class CacheBean {
+
+@CacheRemoveAll
+public void invalidateAll() {
+    //
+}
+
+}
+----
+
+== Let's try
+
+All annotations under `{package}.*` are only designed so we need to use a DI (Dependency Injection) container technology, to process these annotations in runtime a
+nd AOP manner. Yes, we can use any DI container (CDI, Spring and Guice eg.) to use JCache annotations in our applications. It doesn't matter which one you pick, JCache is a standard.
+
+I want to use CDI container to test JCache annotations. If we have a https://docs.oracle.com/javaee/7/tutorial/cdi-basic013.htm#GJBNZ[CDI enabled] Java EE application, registering JCache CDI interceptors in `beans.xml` is enough to start coding JCache. However, I want to use CDI in Java SE environment.
+[NOTE]
+====
+Spring Framework also supports JCache annotations since https://spring.io/blog/2014/04/14/cache-abstraction-jcache-jsr-107-annotations-support[Spring 3.1] 
+====
+
+Here is my project structure
+
+.Project structure
+[tree,file="project-tree.png",align=center]
+--
+CDI-JCache
+|--pom.xml
+`--src
+   `--main
+      |--java
+      |  `--com
+      |     `--kodcu
+      |        |--App.java
+      |        |--CacheBean.java
+      |        `--Person.java
+      `--resources
+         `--META-INF
+            `--beans.xml
+--
+
+The project prepared in `maven` project format.
+
+. `pom.xml`
++
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <packaging>jar</packaging>
+
+    <groupId>CDI-JCache</groupId>
+    <artifactId>CDI-JCache</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <dependency> <1>
+            <groupId>org.jboss.weld.se</groupId>
+            <artifactId>weld-se-core</artifactId>
+            <version>3.0.0.Alpha13</version>
+        </dependency>
+        <dependency> <2>
+            <groupId>org.jsr107.ri</groupId>
+            <artifactId>cache-annotations-ri-cdi</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency> <3>
+            <groupId>org.jsr107.ri</groupId>
+            <artifactId>cache-ri-impl</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+    </dependencies>
+    
+</project>
+----
+<1> Weld Java SE dependency (CDI RI (Reference Implementation))
+<2> Dependency have JCache CDI extensions. (Look at http://search.maven.org/#search%7Cga%7C1%7Corg.jsr107.ri[maven.search.org,window="_blank"])
+<3> JCache's RI dependency (You can use any other JCache implementation by just replacing this dependency)
+
+
+. `beans.xml`
++
+Registers CDI container to use it. We need to declare JCache's CDI interceptors here.
++
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<beans
+    xmlns="http://xmlns.jcp.org/xml/ns/javaee"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee 
+                  http://xmlns.jcp.org/xml/ns/javaee/beans_1_1.xsd"
+    bean-discovery-mode="all">
+
+<interceptors>
+    <class>org.jsr107.ri.annotations.cdi.CacheResultInterceptor</class> <1>
+    <class>org.jsr107.ri.annotations.cdi.CacheRemoveEntryInterceptor</class> <2>
+    <class>org.jsr107.ri.annotations.cdi.CacheRemoveAllInterceptor</class> <3>
+    <class>org.jsr107.ri.annotations.cdi.CachePutInterceptor</class> <4>
+</interceptors>
+
+</beans>
+----
+<1> CDI interceptor declaration for `@CacheResult` annotation.
+<2> CDI interceptor declaration for `@CacheRemove` annotation.
+<3> CDI interceptor declaration for `@CacheRemoveAll` annotation.
+<4> CDI interceptor declaration for `@CachePut` annotation.
+
+. `com.kodcu.*`
+
+.. `com.kodcu.Person`
++
+It will be used as the cached value and required to be `Serializable`
++
+[source,java]
+----
+public class Person implements Serializable {
+
+    private Long id;
+    private String name;
+    private String status;
+
+    public Person() {
+    }
+
+    public Person(Long id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    public Person(long id) {
+        this(id, "Person-" + id);
+    }
+
+    // getter, setter metodları
+
+
+    public void updateStatus() {
+        setStatus("Cached " + ThreadLocalRandom.current().nextLong(1, 10000));
+    }
+}
+----
+
+.. `com.kodcu.CacheBean`
++
+It is a CDI bean and will be used to test JCache annotations.
++
+[source,java]
+----
+@CacheDefaults(cacheName = "personCacher")
+public class CacheBean {
+
+
+    @CachePut
+    public void put(@CacheKey Long id, @CacheValue Person person) {
+        person.updateStatus();
+    }
+
+    @CacheResult
+    public Person get(@CacheKey Long id) {
+        final Person person = new Person(id);
+        person.updateStatus();
+        return person;
+    }
+
+    @CacheRemove
+    public void invalidate(@CacheKey Long id) {
+
+    }
+
+    @CacheRemoveAll
+    public void invalidateAll() {
+
+    }
+
+}
+----
+
+.. `com.kodcu.App`
++
+[source,java]
+----
+public class App {
+
+    @Inject
+    private CacheBean cacheBean; <3>
+
+    public static void main(String[] args) throws Exception {
+        
+        CDI<Object> cdi = CDI.getCDIProvider().initialize(); <1>
+        final App app = cdi.select(App.class).get(); <2>
+
+        final CacheBean cacheBean = app.cacheBean;
+
+        print("Put first object in cache");
+
+        // Put cahce id:1,name:Rahman Usta
+        cacheBean.put(1L, new Person(1L));
+
+        // Get id:1
+        final Person p1 = cacheBean.get(1L);
+        print(p1);
+        // Get id:1
+        final Person p2 = cacheBean.get(1L);
+        print(p2);
+        // Get id:1
+        final Person p3 = cacheBean.get(1L);
+        print(p3);
+
+        print("\n******\n");
+
+        print("Put second object in cache");
+        cacheBean.put(2L, new Person(2L));
+
+        // Get id:2
+        final Person p4 = cacheBean.get(2L);
+        print(p4);
+        // Get id:2
+        final Person p5 = cacheBean.get(2L);
+        print(p5);
+
+        print("\n******\n");
+
+        // Invalidate one
+        print("Invalidate first object in cache");
+        cacheBean.invalidate(1L);
+
+        print(cacheBean.get(1L));
+        print(cacheBean.get(2L));
+
+        print("\n******\n");
+
+        // Invalidate all
+        print("Invalidate all in cache");
+        cacheBean.invalidateAll();
+
+        print(cacheBean.get(1L));
+        print(cacheBean.get(2L));
+
+    }
+
+
+    private static void print(Object object) {
+        System.out.println(object);
+    }
+
+}
+----
+<1> CDI konteyner başlatılıyor.
+<2> App türünden CDI nesnesi elde ediliyor.
+<3> CacheBean CDI nesnesi enjekte ediliyor.
++
+`App#main` metodu çalıştırıldığında aşağıdaki çıktıyı elde ederiz.
++
+[source,bash]
+----
+INFO: WELD-ENV-002003: Weld SE container STATIC_INSTANCE initialized
+Kas 02, 2015 11:37:44 PM org.jsr107.ri.annotations.DefaultCacheResolverFactory getCacheResolver
+WARNING: No Cache named 'personCacher' was found in the CacheManager, a default cache will be created.
+
+Put first object in cache <1>
+Get Person{id=1, name='Person-1', status='Cached 5859'} // Cache hit
+Get Person{id=1, name='Person-1', status='Cached 5859'} // Cache hit
+Get Person{id=1, name='Person-1', status='Cached 5859'} // Cache hit
+******
+Put second object in cache <2>
+Get Person{id=2, name='Person-2', status='Cached 3832'} // Cache hit
+Get Person{id=2, name='Person-2', status='Cached 3832'} // Cache hit
+******
+Invalidate first object in cache <3>
+Get Person{id=1, name='Person-1', status='Cached 19'} // Cache miss
+Get Person{id=2, name='Person-2', status='Cached 3832'} // Cache hit
+******
+Invalidate all in cache <4>
+Get Person{id=1, name='Person-1', status='Cached 9648'} // Cache miss
+Get Person{id=2, name='Person-2', status='Cached 9072'} // Cache miss
+Weld SE container STATIC_INSTANCE shut down by shutdown hook
+----
+<1> Puts first ``Person`` object into the cache, then gets same object until it is removed from cache.
+<2> Puts second ``Person`` object into the cache, then gets same object until it is removed from cache.
+<3> Removes first object from the cache, then returns new cached object.
+<4> Removes first and second object from the cache, then returns new cached objects.
+
+You can access demo project from Adop-a-JSR Github page. https://github.com/Adopt-a-JSR/JCache-CDI[Download,window="_blank"]
+
+
+Hope to see you again.

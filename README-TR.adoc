@@ -1,0 +1,3 @@
+== Using JCache annotations in CDI container
+
+Sample project demonstrates usage of JCache annotations in CDI container.
